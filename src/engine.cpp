@@ -1,55 +1,58 @@
 #include <thread>
 #include <atomic>
 #include <vector>
+#include <chrono>
 #include "engine.h"
+#include <iostream>
+namespace Gwers {
 namespace Ochr {
 
 
 
-namespace Engine
-{
-   enum class State {null,init,final,exec,done};
-   void thread(int);
-   State g_state {State::null};
-   int g_threads {-1};
-   int g_periodNS {-1};
-   thread_local int g_id {-1};
-   std::atomic<int> g_alive;
-   std::atomic<int> g_cnt;
-   std::atomic<unsigned int> g_tick {0};
-   std::vector<std::vector<Unit*>> g_units;
-}
+Engine::State Engine::_state {Engine::State::null};
+int Engine::_threads {-1};
+int Engine::_periodNS {-1};
+Engine::lfp Engine::_loopFunc {nullptr};
+Engine::gefp Engine::_gweExcFunc {nullptr};
+Engine::sefp Engine::_stdExcFunc {nullptr};
+thread_local int Engine::_id {-1};
+std::atomic<int> Engine::_alive;
+std::atomic<int> Engine::_cnt[2];
+std::atomic<int> Engine::_lock;
+int Engine::_fst;
+std::atomic<unsigned int> Engine::_tick {0};
+std::vector<std::vector<Unit*>> Engine::_units;
 
 
 
 void Engine::initialize()
 {
-   TRACE("Ochr::Engine::initialize()");
-   ASSERT(g_state==State::null,InvalidUse,__LINE__);
+   TRACE(__PRETTY_FUNCTION__);
+   ASSERT(_state==State::null,InvalidUse,__LINE__);
    if (std::thread::hardware_concurrency()>0)
    {
-      g_threads = std::thread::hardware_concurrency();
+      _threads = std::thread::hardware_concurrency();
    }
-   g_state = State::init;
+   _state = State::init;
 }
 
 
 
 int Engine::threads()
 {
-   TRACE("Ochr::Engine::threads()");
-   return g_threads;
+   TRACE(__PRETTY_FUNCTION__);
+   return _threads;
 }
 
 
 
 void Engine::threads(int Sz)
 {
-   TRACE("Ochr::Engine::threads(int)",Sz);
-   ASSERT(g_state<=State::init,InvalidUse,__LINE__);
-   if (g_state<=State::init)
+   TRACE(__PRETTY_FUNCTION__,Sz);
+   ASSERT(_state<=State::init,InvalidUse,__LINE__);
+   if (_state<=State::init)
    {
-      g_threads = Sz;
+      _threads = Sz;
    }
 }
 
@@ -57,19 +60,44 @@ void Engine::threads(int Sz)
 
 int Engine::period()
 {
-   TRACE("Ochr::Engine::period()");
-   return g_periodNS/1000000;
+   TRACE(__PRETTY_FUNCTION__);
+   return _periodNS/1000000;
 }
 
 
 
 void Engine::period(int time)
 {
-   TRACE("Ochr::Engine::period(int)",time);
-   ASSERT(g_state<=State::init,InvalidUse,__LINE__);
-   if (g_state<=State::init)
+   TRACE(__PRETTY_FUNCTION__,time);
+   ASSERT(_state<=State::init,InvalidUse,__LINE__);
+   if (_state<=State::init)
    {
-      g_periodNS = time*1000000;
+      _periodNS = time*1000000;
+   }
+}
+
+
+
+void Engine::loop(lfp loopFunc)
+{
+   TRACE(__PRETTY_FUNCTION__,loopFunc);
+   ASSERT(_state<=State::init,InvalidUse,__LINE__);
+   if (_state<=State::init)
+   {
+      _loopFunc = loopFunc;
+   }
+}
+
+
+
+void Engine::exceptionHandlers(gefp gweExcFunc, sefp stdExcFunc)
+{
+   TRACE(__PRETTY_FUNCTION__,gweExcFunc,stdExcFunc);
+   ASSERT(_state<=State::init,InvalidUse,__LINE__);
+   if (_state<=State::init)
+   {
+      _gweExcFunc = gweExcFunc;
+      _stdExcFunc = stdExcFunc;
    }
 }
 
@@ -77,12 +105,12 @@ void Engine::period(int time)
 
 void Engine::finalize()
 {
-   TRACE("Ochr::Engine::finalize()");
-   ASSERT(g_state==State::init,InvalidUse,__LINE__);
-   if (g_state==State::init)
+   TRACE(__PRETTY_FUNCTION__);
+   ASSERT(_state==State::init,InvalidUse,__LINE__);
+   if (_state==State::init)
    {
-      g_units.resize(g_threads);
-      g_state = State::final;
+      _units.resize(_threads);
+      _state = State::final;
    }
 }
 
@@ -90,21 +118,28 @@ void Engine::finalize()
 
 void Engine::run()
 {
-   TRACE("Ochr::Engine::run()");
-   ASSERT(g_state==State::final,InvalidUse,__LINE__);
-   ASSERT(g_threads>0,ThreadsNotSet,__LINE__);
-   ASSERT(g_periodNS>0,PeriodNotSet,__LINE__);
-   if (g_state==State::final)
+   TRACE(__PRETTY_FUNCTION__);
+   ASSERT(_state==State::final,InvalidUse,__LINE__);
+   ASSERT(_threads>0,ThreadsNotSet,__LINE__);
+   ASSERT(_periodNS>0,PeriodNotSet,__LINE__);
+   if (_state==State::final)
    {
-      g_state = State::exec;
-      g_alive = true;
-      g_cnt = 0;
-      for (int i = 1;i<g_threads;++i)
+      _state = State::exec;
+      _alive = true;
+      _cnt[0] = _cnt[1] = 0;
+      _lock = true;
+      std::thread* ts[_threads];
+      for (int i = 1;i<_threads;++i)
       {
-         std::thread t {thread,i};
+         ts[i] = new std::thread(thread,i);
       }
       thread(0);
-      g_state = State::done;
+      for (int i = 1;i<_threads;++i)
+      {
+         ts[i]->join();
+         delete ts[i];
+      }
+      _state = State::done;
    }
 }
 
@@ -112,16 +147,16 @@ void Engine::run()
 
 void Engine::add(Unit* nu)
 {
-   TRACE("Ochr::Engine::add(Unit*)",nu);
-   ASSERT(g_state==State::final||g_state==State::exec,InvalidUse,__LINE__);
-   if (g_state==State::final||g_state==State::exec)
+   TRACE(__PRETTY_FUNCTION__,nu);
+   ASSERT(_state==State::final||_state==State::exec,InvalidUse,__LINE__);
+   if (_state==State::final||_state==State::exec)
    {
-      int i = g_id;
-      if (g_state==State::final)
+      int i = _id;
+      if (_state==State::final)
       {
          i = 0;
       }
-      g_units[i].push_back(nu);
+      _units[i].push_back(nu);
    }
 }
 
@@ -129,18 +164,16 @@ void Engine::add(Unit* nu)
 
 void Engine::erase(int ui)
 {
-   TRACE("Ochr::Engine::erase(int)",ui);
-   ASSERT(g_state==State::final||g_state==State::exec,InvalidUse,__LINE__);
-   if (g_state==State::final||g_state==State::exec)
+   TRACE(__PRETTY_FUNCTION__,ui);
+   ASSERT(_state==State::final||_state==State::exec,InvalidUse,__LINE__);
+   if (_state==State::final||_state==State::exec)
    {
-      int i = g_id;
-      if (g_state==State::final)
+      int i = _id;
+      if (_state==State::final)
       {
          i = 0;
       }
-      //CHANGE UNIT INCREMENT RIGHT HERE!!!
-      g_units[i][ui] = g_units[i].back();
-      g_units[i].pop_back();
+      _units[i][ui] = nullptr;
    }
 }
 
@@ -148,29 +181,38 @@ void Engine::erase(int ui)
 
 int Engine::id()
 {
-   TRACE("Ochr::Engine::id()");
-   ASSERT(g_state==State::exec,InvalidUse,__LINE__);
-   return g_id;
+   TRACE(__PRETTY_FUNCTION__);
+   ASSERT(_state==State::exec,InvalidUse,__LINE__);
+   return _id;
 }
 
 
 
-int Engine::which()
+int Engine::wIn()
 {
-   TRACE("Ochr::Engine::which()");
-   ASSERT(g_state==State::exec,InvalidUse,__LINE__);
-   return g_tick&0x1;
+   TRACE(__PRETTY_FUNCTION__);
+   ASSERT(_state==State::exec,InvalidUse,__LINE__);
+   return _tick&0x1;
+}
+
+
+
+int Engine::wOut()
+{
+   TRACE(__PRETTY_FUNCTION__);
+   ASSERT(_state==State::exec,InvalidUse,__LINE__);
+   return (_tick&0x1)^0x1;
 }
 
 
 
 void Engine::exit()
 {
-   TRACE("Ochr::Engine::exit()");
-   ASSERT(g_state==State::exec,InvalidUse,__LINE__);
-   if (g_state==State::exec)
+   TRACE(__PRETTY_FUNCTION__);
+   ASSERT(_state==State::exec,InvalidUse,__LINE__);
+   if (_state==State::exec)
    {
-      g_alive = false;
+      _alive = false;
    }
 }
 
@@ -178,29 +220,103 @@ void Engine::exit()
 
 void Engine::thread(int id)
 {
-   D(Effro::Trace::flush());
-   TRACE("Ochr::Engine::thread(int)",id);
-   g_id = id;
+   using namespace std::chrono;
+   D(Effro::Trace::flush();)
+   TRACE(__PRETTY_FUNCTION__,id);
+   _id = id;
    try
    {
       bool alive {true};
       while (alive)
       {
-         ;
+         auto t1 = high_resolution_clock::now();
+         int ntick = _tick+1;
+         ++_cnt[0];
+         while (_cnt[0]<_threads)
+         {
+            std::this_thread::sleep_for(microseconds(1));
+         }
+         _loopFunc();
+         for (int i = 0;i<_units[_id].size();)
+         {
+            Unit* p = _units[_id][i];
+            if (p)
+            {
+               ;//p->tick();
+               ++i;
+            }
+            else
+            {
+               if (p!=_units[_id].back())
+               {
+                  p = _units[_id][i] = _units[_id].back();
+                  ;//p->move(i);
+               }
+               _units[_id].pop_back();
+            }
+         }
+         int det = ++_cnt[1];
+         if (det==_threads)
+         {
+            while (_lock);
+            if (_units[_id].size()>0)
+            {
+               _units[_fst].push_back(_units[_id].back());
+               _units[_id].pop_back();
+               ;//(_units[_fst].back())->move(_units[fst].size()-1);
+            }
+            _lock = true;
+            _cnt[0] = _cnt[1] = 0;
+            _tick++;
+         }
+         else if (det==1)
+         {
+            _fst = _id;
+            _lock = false;
+         }
+         auto t2 = high_resolution_clock::now();
+         int dur = duration_cast<nanoseconds>(t2-t1).count();
+         if (dur<_periodNS)
+         {
+            std::this_thread::sleep_for(nanoseconds(_periodNS-dur));
+         }
+         while (ntick!=_tick&&_alive)
+         {
+            std::this_thread::sleep_for(microseconds(1));
+         }
+         if (!_alive)
+         {
+            alive = false;
+         }
       }
    }
    catch(Effro::Exception e)
    {
-      ;//WHAT TO DO HERE?
-      g_alive = false;
+      if (_gweExcFunc)
+      {
+         _gweExcFunc(e);
+         _alive = false;
+      }
+      else
+      {
+         throw e;
+      }
    }
-   catch(...)
+   catch(std::exception e)
    {
-      ;//OR HERE??
-      g_alive = false;
+      if (_stdExcFunc)
+      {
+         _stdExcFunc(e);
+         _alive = false;
+      }
+      else
+      {
+         throw e;
+      }
    }
 }
 
 
 
+}
 }
