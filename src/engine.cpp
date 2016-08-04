@@ -294,8 +294,9 @@ void Engine::thread(int id)
    {
       if (_gweExcFunc)
       {
-         _gweExcFunc(e);
          _alive = false;
+         _lock = false;
+         _gweExcFunc(e);
       }
       else
       {
@@ -306,8 +307,9 @@ void Engine::thread(int id)
    {
       if (_stdExcFunc)
       {
-         _stdExcFunc(e);
          _alive = false;
+         _lock = false;
+         _stdExcFunc(e);
       }
       else
       {
