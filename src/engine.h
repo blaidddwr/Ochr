@@ -13,9 +13,9 @@ class Unit;
 class Engine
 {
 public:
-   using lfp = void (*)(void);
-   using gefp = void (*)(Effro::Exception&);
-   using sefp = void (*)(std::exception&);
+   using Lfp = void (*)(void);
+   using Eefp = void (*)(Effro::Exception&);
+   using Sefp = void (*)(std::exception&);
    DECLARE(Offr::Engine)
    EXCEPTION(InvalidUse)
    EXCEPTION(ThreadsNotSet)
@@ -26,8 +26,8 @@ public:
    static void threads(int);
    static int period();
    static void period(int);
-   static void loop(lfp);
-   static void exceptionHandlers(gefp,sefp);
+   static void loop(Lfp);
+   static void exceptionHandlers(Eefp,Sefp);
    static void finalize();
    static void run();
    static int id();
@@ -42,9 +42,9 @@ private:
    static State _state;
    static int _threads;
    static int _periodNS;
-   static lfp _loopFunc;
-   static gefp _gweExcFunc;
-   static sefp _stdExcFunc;
+   static Lfp _loopFunc;
+   static Eefp _gweExcFunc;
+   static Sefp _stdExcFunc;
    thread_local static int _id;
    static std::atomic<int> _alive;
    static std::atomic<int> _cnt[2];

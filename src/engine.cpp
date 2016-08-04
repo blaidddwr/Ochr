@@ -12,9 +12,9 @@ namespace Ochr {
 Engine::State Engine::_state {Engine::State::null};
 int Engine::_threads {-1};
 int Engine::_periodNS {-1};
-Engine::lfp Engine::_loopFunc {nullptr};
-Engine::gefp Engine::_gweExcFunc {nullptr};
-Engine::sefp Engine::_stdExcFunc {nullptr};
+Engine::Lfp Engine::_loopFunc {nullptr};
+Engine::Eefp Engine::_gweExcFunc {nullptr};
+Engine::Sefp Engine::_stdExcFunc {nullptr};
 thread_local int Engine::_id {-1};
 std::atomic<int> Engine::_alive;
 std::atomic<int> Engine::_cnt[2];
@@ -78,7 +78,7 @@ void Engine::period(int time)
 
 
 
-void Engine::loop(lfp loopFunc)
+void Engine::loop(Lfp loopFunc)
 {
    TRACE(__PRETTY_FUNCTION__,loopFunc);
    ASSERT(_state<=State::init,InvalidUse,__LINE__);
@@ -90,7 +90,7 @@ void Engine::loop(lfp loopFunc)
 
 
 
-void Engine::exceptionHandlers(gefp gweExcFunc, sefp stdExcFunc)
+void Engine::exceptionHandlers(Eefp gweExcFunc, Sefp stdExcFunc)
 {
    TRACE(__PRETTY_FUNCTION__,gweExcFunc,stdExcFunc);
    ASSERT(_state<=State::init,InvalidUse,__LINE__);
