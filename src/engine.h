@@ -1,7 +1,7 @@
 #ifndef GWERS_OCHR_ENGINE_H
 #define GWERS_OCHR_ENGINE_H
 #include <atomic>
-#include <exception.h>
+#include <effro/effro.h>
 namespace Gwers {
 namespace Ochr {
 

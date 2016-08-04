@@ -9,8 +9,13 @@ FILES := Ochr.files
 build := ../build/
 lib := ../lib/
 incl := ../include/
+ifndef IROOT
+path := ../..
+else
+path := $(IROOT)
+endif
 
-acxxflags := $(CXXFLAGS) -g -std=c++11 -I../../Effro/include -DDEBUG
+acxxflags := $(CXXFLAGS) -g -std=c++11 -I../../include
 aldflags := $(LDFLAGS)
 aldlibs := $(LDLIBS) -lpthread
 
@@ -22,16 +27,16 @@ srcs := $(filter %.cpp,$(raw))
 dpds := $(addprefix $(build),$(srcs:%.cpp=%.d))
 objs := $(addprefix $(build),$(srcs:%.cpp=%.o))
 
-hdrs := $(addprefix $(incl),$(filter %.h,$(raw)))
 
 
-
-.PHONY: clean depclean all library doc
+.PHONY: clean depclean all library doc install
 
 all: library
 library: $(libf) $(hdrs)
 
+ifndef DEPIGNORE
 include $(dpds)
+endif
 
 $(libf): $(objs) $(dpds)
 +@echo "Building library."
@@ -43,14 +48,10 @@ depend: $(dpds)
 
 $(build)%.o : %.cpp
 +@echo "Building object $(*F)."
-+@$(CXX) $(acxxflags) -c $< -o $(build)$@
-
-$(incl)%.h: %.h
-+@echo "Linking $(*F)."
-+@cp $< $@
++@$(CXX) $(acxxflags) -c $< -o $@
 
 $(build)%.d: %.cpp
-+@echo "Building depend $(*F)."
++@echo "Building depend $(*F)"
 +@echo -n "$@ $(build)" > $@
 +@$(CXX) $(acxxflags) -MM $< >> $@
 
@@ -65,3 +66,10 @@ depclean:
 doc:
 +@echo "Making documentation."
 +@doxygen
+
+install: $(libf)
++@echo "Installing module."
++@mkdir -p "$(path)/lib"
++@cp $(libf) "$(path)/lib"
++@mkdir -p "$(path)/include/$(NAME)"
++@cp *.h "$(path)/include/$(NAME)"
