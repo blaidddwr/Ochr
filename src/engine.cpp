@@ -157,6 +157,7 @@ void Engine::add(Unit* nu)
          i = 0;
       }
       _units[i].push_back(nu);
+      ;//nu->newTId(i);
    }
 }
 
@@ -242,7 +243,7 @@ void Engine::thread(int id)
             Unit* p = _units[_id][i];
             if (p)
             {
-               ;//p->tick();
+               ;//p->tock();
                ++i;
             }
             else
@@ -261,9 +262,11 @@ void Engine::thread(int id)
             while (_lock);
             if (_units[_id].size()>0)
             {
-               _units[_fst].push_back(_units[_id].back());
+               Unit* p = _units[_id].back();
                _units[_id].pop_back();
-               ;//(_units[_fst].back())->move(_units[fst].size()-1);
+               _units[_fst].push_back(p);
+               ;//p->move(_units[fst].size()-1);
+               ;//p->newTId(_fst);
             }
             _lock = true;
             _cnt[0] = _cnt[1] = 0;
