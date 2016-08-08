@@ -15,7 +15,7 @@ else
 path := $(IROOT)
 endif
 
-acxxflags := $(CXXFLAGS) -g -std=c++11 -I../../include
+acxxflags := $(CXXFLAGS) -g -std=c++11 -I../..
 aldflags := $(LDFLAGS)
 aldlibs := $(LDLIBS) -lpthread
 
@@ -71,5 +71,3 @@ install: $(libf)
 +@echo "Installing module."
 +@mkdir -p "$(path)/lib"
 +@cp $(libf) "$(path)/lib"
-+@mkdir -p "$(path)/include/$(NAME)"
-+@cp *.h "$(path)/include/$(NAME)"

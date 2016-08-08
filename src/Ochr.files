@@ -1,4 +1,4 @@
 Makefile
-ochr.h
+../ochr.h
 engine.cpp
 engine.h
