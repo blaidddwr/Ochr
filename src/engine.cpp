@@ -9,6 +9,10 @@ namespace Ochr {
 
 
 
+constexpr int g_NanoSecsInMilliSec {1000000};
+
+
+
 Engine::State Engine::_state {Engine::State::null};
 int Engine::_threads {-1};
 int Engine::_periodNS {-1};
@@ -21,7 +25,7 @@ std::atomic<int> Engine::_cnt[2];
 std::atomic<int> Engine::_lock;
 int Engine::_fst;
 std::atomic<unsigned int> Engine::_tick {0};
-std::vector<std::vector<Unit*>> Engine::_units;
+std::vector<std::vector<Atom*>> Engine::_atoms;
 
 
 
@@ -58,21 +62,21 @@ void Engine::threads(int Sz)
 
 
 
-int Engine::period()
+int Engine::periodMS()
 {
    TRACE(__PRETTY_FUNCTION__);
-   return _periodNS/1000000;
+   return _periodNS/g_NanoSecsInMilliSec;
 }
 
 
 
-void Engine::period(int time)
+void Engine::periodMS(int time)
 {
    TRACE(__PRETTY_FUNCTION__,time);
    ASSERT(_state<=State::init,InvalidUse,__LINE__);
    if (_state<=State::init)
    {
-      _periodNS = time*1000000;
+      _periodNS = time*g_NanoSecsInMilliSec;
    }
 }
 
@@ -109,7 +113,7 @@ void Engine::finalize()
    ASSERT(_state==State::init,InvalidUse,__LINE__);
    if (_state==State::init)
    {
-      _units.resize(_threads);
+      _atoms.resize(_threads);
       _state = State::final;
    }
 }
@@ -145,7 +149,7 @@ void Engine::run()
 
 
 
-void Engine::add(Unit* nu)
+void Engine::add(Atom* nu)
 {
    TRACE(__PRETTY_FUNCTION__,nu);
    ASSERT(_state==State::final||_state==State::exec,InvalidUse,__LINE__);
@@ -156,8 +160,9 @@ void Engine::add(Unit* nu)
       {
          i = 0;
       }
-      _units[i].push_back(nu);
-      ;//nu->newTId(i);
+      _atoms[i].push_back(nu);
+      nu->move(_atoms[i].size()-1);
+      nu->newTId(i);
    }
 }
 
@@ -174,7 +179,7 @@ void Engine::erase(int ui)
       {
          i = 0;
       }
-      _units[i][ui] = nullptr;
+      _atoms[i][ui] = nullptr;
    }
 }
 
@@ -238,35 +243,38 @@ void Engine::thread(int id)
             std::this_thread::sleep_for(microseconds(1));
          }
          _loopFunc();
-         for (int i = 0;i<_units[_id].size();)
+         for (int i = 0;i<_atoms[_id].size();)
          {
-            Unit* p = _units[_id][i];
+            Atom* p = _atoms[_id][i];
             if (p)
             {
-               ;//p->tock();
+               p->tock();
                ++i;
             }
             else
             {
-               if (p!=_units[_id].back())
+               if (p!=_atoms[_id].back())
                {
-                  p = _units[_id][i] = _units[_id].back();
-                  ;//p->move(i);
+                  p = _atoms[_id][i] = _atoms[_id].back();
+                  if (p)
+                  {
+                     p->move(i);
+                  }
                }
-               _units[_id].pop_back();
+               _atoms[_id].pop_back();
             }
          }
          int det = ++_cnt[1];
          if (det==_threads)
          {
             while (_lock);
-            if (_units[_id].size()>0)
+            if (_atoms[_id].size()>0)
             {
-               Unit* p = _units[_id].back();
-               _units[_id].pop_back();
-               _units[_fst].push_back(p);
-               ;//p->move(_units[fst].size()-1);
-               ;//p->newTId(_fst);
+               Atom* p = _atoms[_id].back();
+               _atoms[_id].pop_back();
+               _atoms[_fst].push_back(p);
+               p->move(_atoms[_fst].size()-1);
+               p->newTId(_fst);
             }
             _lock = true;
             _cnt[0] = _cnt[1] = 0;
