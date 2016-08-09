@@ -2,3 +2,5 @@ Makefile
 ../ochr.h
 engine.cpp
 engine.h
+atom.cpp
+atom.h
